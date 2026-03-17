@@ -1,0 +1,135 @@
+@import "tailwindcss";
+
+@keyframes cardPop {
+  0% { transform: scale(0.3) rotate(-8deg); opacity: 0; filter: blur(20px); }
+  70% { transform: scale(1.05) rotate(2deg); }
+  100% { transform: scale(1) rotate(0); opacity: 1; filter: blur(0); }
+}
+
+@keyframes shine {
+  0% { transform: translateX(-100%) skewX(-15deg); }
+  100% { transform: translateX(200%) skewX(-15deg); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-150%); }
+  100% { transform: translateX(150%); }
+}
+
+@keyframes neonPulse {
+  0%, 100% { box-shadow: 0 0 0 rgba(99,102,241,0); }
+  50% { box-shadow: 0 0 28px rgba(99,102,241,0.55), 0 0 42px rgba(236,72,153,0.35); }
+}
+
+@keyframes ripple {
+  0% { transform: scale(0); opacity: 0.45; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+@keyframes magicFlash {
+  0% { opacity: 0; }
+  25% { opacity: 0.7; }
+  100% { opacity: 0; }
+}
+
+@keyframes checkPop {
+  0% { transform: scale(0.6); opacity: 0; }
+  70% { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes liftIn {
+  0% { opacity: 0; transform: translateY(40px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.animate-card-pop {
+  animation: cardPop 600ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.animate-shake {
+  animation: shake 0.4s ease-in-out;
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite linear;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+  width: 200%;
+}
+
+.animate-neon-pulse {
+  animation: neonPulse 1.6s ease-in-out infinite;
+}
+
+.animate-magic-flash {
+  animation: magicFlash 700ms ease-out;
+}
+
+.animate-lift-in {
+  animation: liftIn 500ms ease forwards;
+}
+
+.animate-check-pop {
+  animation: checkPop 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.btn-shine {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-shine::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(to right, transparent, rgba(255,255,255,0.2), transparent);
+  transform: translateX(-100%) skewX(-15deg);
+}
+
+.btn-shine:hover::after {
+  animation: shine 1.5s ease-in-out;
+}
+
+.btn-ripple {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-ripple::before {
+  content: '';
+  position: absolute;
+  width: 140%;
+  aspect-ratio: 1;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(255,255,255,0.35) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.btn-ripple:active::before {
+  animation: ripple 500ms ease-out;
+}
+
+.theme-selected {
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.15), 0 0 24px rgba(79,70,229,0.5);
+}
+
+/* Custom scrollbar for themes on mobile */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
