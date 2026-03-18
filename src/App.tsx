@@ -10,7 +10,7 @@ import confetti from 'canvas-confetti';
 import { Zap } from 'lucide-react';
 
 type ViewState = 'home' | 'result' | 'shared';
-const MAX_SHARE_URL_LENGTH = 3000;
+const MAX_SHARE_URL_LENGTH = 7000;
 
 export default function App() {
   const [view, setView] = useState<ViewState>('home');
