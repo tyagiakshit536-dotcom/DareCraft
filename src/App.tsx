@@ -10,6 +10,7 @@ import confetti from 'canvas-confetti';
 import { Zap } from 'lucide-react';
 
 type ViewState = 'home' | 'result' | 'shared';
+const MAX_SHARE_URL_LENGTH = 3000;
 
 export default function App() {
   const [view, setView] = useState<ViewState>('home');
@@ -49,12 +50,19 @@ export default function App() {
     // Fake counter logic
     const savedCounter = localStorage.getItem('dareCounter');
     if (savedCounter) {
-      setFakeCounter(parseInt(savedCounter, 10));
+      const parsedCounter = Number.parseInt(savedCounter, 10);
+      if (Number.isFinite(parsedCounter)) {
+        setFakeCounter(parsedCounter);
+      }
     }
     const interval = setInterval(() => {
       setFakeCounter((prev) => {
         const next = prev + Math.floor(Math.random() * 3);
-        localStorage.setItem('dareCounter', next.toString());
+        try {
+          localStorage.setItem('dareCounter', next.toString());
+        } catch {
+          // Ignore storage write errors to avoid breaking counter animation.
+        }
         return next;
       });
     }, 5000);
@@ -139,7 +147,18 @@ export default function App() {
       };
       
       const encoded = encodeDare(data);
+      if (!encoded) {
+        alert('Failed to prepare share link. Please try again.');
+        setIsGenerating(false);
+        return;
+      }
+
       const url = `${window.location.origin}${window.location.pathname}?d=${encoded}`;
+      if (url.length > MAX_SHARE_URL_LENGTH) {
+        alert('Your dare is too long to share as a link. Please shorten your goal or twist.');
+        setIsGenerating(false);
+        return;
+      }
       setShareUrl(url);
       
       // Update URL without reloading
@@ -168,16 +187,26 @@ export default function App() {
   };
 
   const handleJoin = () => {
-    // Save to local storage
-    const dares = JSON.parse(localStorage.getItem('myDares') || '[]');
-    dares.push({
-      goal,
-      duration,
-      themeId: theme.id,
-      twist,
-      startedAt: new Date().toISOString(),
-    });
-    localStorage.setItem('myDares', JSON.stringify(dares));
+    try {
+      // Save to local storage.
+      const raw = localStorage.getItem('myDares');
+      const parsed = raw ? JSON.parse(raw) : [];
+      const dares = Array.isArray(parsed) ? parsed : [];
+
+      dares.push({
+        goal,
+        duration,
+        themeId: theme.id,
+        twist,
+        startedAt: new Date().toISOString(),
+      });
+
+      localStorage.setItem('myDares', JSON.stringify(dares));
+    } catch (error) {
+      console.error('Failed to save dare to local storage', error);
+      alert('Could not save your dare locally. Please try again.');
+      return;
+    }
     
     confetti({
       particleCount: 200,

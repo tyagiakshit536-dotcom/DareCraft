@@ -16,6 +16,9 @@ export const DareCard = forwardRef<HTMLDivElement, DareCardProps>(
   ({ goal, duration, theme, twist, isShared = false, progress = 0, customBgUrl }, ref) => {
     const titleText = `${duration} DAY ${theme.name} DARE`;
     const displayGoal = goal.trim() || 'Do something amazing';
+    const isSafeCustomBgUrl =
+      typeof customBgUrl === 'string' &&
+      /^(data:image\/|blob:|https?:\/\/)/i.test(customBgUrl);
 
     return (
       <div
@@ -26,8 +29,17 @@ export const DareCard = forwardRef<HTMLDivElement, DareCardProps>(
           theme.textClass
         )}
       >
-        {customBgUrl && (
-          <img src={customBgUrl} className="absolute inset-0 w-full h-full object-cover opacity-80" alt="AI Generated Background" />
+        {isSafeCustomBgUrl && (
+          <img
+            src={customBgUrl}
+            className="absolute inset-0 w-full h-full object-cover opacity-80"
+            alt="AI Generated Background"
+            loading="eager"
+            decoding="async"
+            onError={() => {
+              // Keep theme background visible if a shared URL includes a broken image.
+            }}
+          />
         )}
 
         {/* Header */}

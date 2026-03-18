@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Theme } from '../lib/themes';
 import { DareCard } from './DareCard';
 import html2canvas from 'html2canvas';
@@ -26,8 +26,17 @@ export function ResultsView({
   customBgUrl,
 }: ResultsViewProps) {
   const cardRef = useRef<HTMLDivElement>(null);
+  const copyResetTimerRef = useRef<number | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (copyResetTimerRef.current !== null) {
+        window.clearTimeout(copyResetTimerRef.current);
+      }
+    };
+  }, []);
 
   const waitForCardImages = async (container: HTMLElement) => {
     const images = Array.from(container.querySelectorAll('img'));
@@ -36,12 +45,27 @@ export function ResultsView({
     await Promise.all(
       images.map((img) => {
         if (img.complete && img.naturalWidth > 0) return Promise.resolve();
-        if (typeof img.decode === 'function') {
-          return img.decode().catch(() => undefined);
-        }
         return new Promise<void>((resolve) => {
-          img.onload = () => resolve();
-          img.onerror = () => resolve();
+          const timeoutId = window.setTimeout(() => resolve(), 5000);
+          if (typeof img.decode === 'function') {
+            img
+              .decode()
+              .catch(() => undefined)
+              .finally(() => {
+                window.clearTimeout(timeoutId);
+                resolve();
+              });
+            return;
+          }
+
+          img.onload = () => {
+            window.clearTimeout(timeoutId);
+            resolve();
+          };
+          img.onerror = () => {
+            window.clearTimeout(timeoutId);
+            resolve();
+          };
         });
       })
     );
@@ -121,9 +145,41 @@ export function ResultsView({
   };
 
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(shareUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    const onCopied = () => {
+      setCopied(true);
+      if (copyResetTimerRef.current !== null) {
+        window.clearTimeout(copyResetTimerRef.current);
+      }
+      copyResetTimerRef.current = window.setTimeout(() => {
+        setCopied(false);
+        copyResetTimerRef.current = null;
+      }, 2000);
+    };
+
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard
+        .writeText(shareUrl)
+        .then(onCopied)
+        .catch(() => {
+          const textArea = document.createElement('textarea');
+          textArea.value = shareUrl;
+          textArea.setAttribute('readonly', '');
+          textArea.style.position = 'fixed';
+          textArea.style.left = '-9999px';
+          document.body.appendChild(textArea);
+          textArea.select();
+          const copiedViaExec = document.execCommand('copy');
+          document.body.removeChild(textArea);
+          if (copiedViaExec) {
+            onCopied();
+            return;
+          }
+          alert('Could not copy automatically. Please copy the link manually from your browser address bar.');
+        });
+      return;
+    }
+
+    alert('Clipboard access is not available in this browser. Please copy the link from the address bar.');
   };
 
   const handleShareToX = () => {

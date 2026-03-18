@@ -56,7 +56,7 @@ export function DareForm({
           : 'Failed to generate AI background image.';
       console.error('AI image generation failed:', message);
       if (message.toLowerCase().includes('leaked')) {
-        alert('Gemini API key is blocked as leaked. Create a new API key in Google AI Studio and update your .env, then restart the dev server.');
+        alert('Image service key is currently blocked. Please contact support to refresh the server key and try again.');
       } else {
         alert(`Failed to generate AI background image: ${message}`);
       }

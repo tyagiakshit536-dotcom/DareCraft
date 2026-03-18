@@ -25,6 +25,9 @@ type Env = {
 const IMAGE_MODEL = 'gemini-2.5-flash-image';
 const TEXT_MODEL = 'gemini-2.5-flash';
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+const MAX_IMAGE_RETRIES = 3;
+const BASE_RETRY_DELAY_MS = 1500;
+const GEMINI_REQUEST_TIMEOUT_MS = 45_000;
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -80,19 +83,48 @@ function isQuotaOrRateLimitError(message: string): boolean {
   );
 }
 
+function isHighDemandError(message: string): boolean {
+  const msg = message.toLowerCase();
+  return (
+    msg.includes('high demand') ||
+    msg.includes('try again later') ||
+    msg.includes('temporarily unavailable') ||
+    msg.includes('overloaded') ||
+    msg.includes('capacity')
+  );
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function callGemini(
   apiKey: string,
   model: string,
   payload: Record<string, unknown>
 ): Promise<GeminiResponse> {
-  const res = await fetch(
-    `${API_BASE}/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), GEMINI_REQUEST_TIMEOUT_MS);
+  let res: Response;
+
+  try {
+    res = await fetch(
+      `${API_BASE}/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      }
+    );
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('Gemini request timed out. Please try again.');
     }
-  );
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   const data = (await res.json()) as GeminiResponse;
   if (!res.ok) {
@@ -182,39 +214,62 @@ export const onRequestPost = async (context: FunctionContext): Promise<Response>
     return jsonResponse({ error: 'Prompt is required.' }, 400);
   }
 
-  try {
-    const imageDataUrl = await generateWithImageModel(apiKey, prompt);
-    return jsonResponse({ imageDataUrl });
-  } catch (error) {
-    const message =
-      error instanceof Error && error.message
-        ? error.message
-        : 'Failed to generate image with Gemini';
+  let lastImageError = 'Failed to generate image with Gemini';
 
-    const retryDelayMs = parseRetryDelayMs(message);
-    if (retryDelayMs && retryDelayMs <= 90_000) {
-      await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
-      try {
-        const imageDataUrl = await generateWithImageModel(apiKey, prompt);
-        return jsonResponse({ imageDataUrl });
-      } catch {
-        // Continue to fallback checks.
+  for (let attempt = 0; attempt <= MAX_IMAGE_RETRIES; attempt += 1) {
+    try {
+      const imageDataUrl = await generateWithImageModel(apiKey, prompt);
+      return jsonResponse({ imageDataUrl });
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Failed to generate image with Gemini';
+      lastImageError = message;
+
+      const explicitRetryDelayMs = parseRetryDelayMs(message);
+      const shouldRetry = isHighDemandError(message) || Boolean(explicitRetryDelayMs);
+      const hasAttemptsRemaining = attempt < MAX_IMAGE_RETRIES;
+
+      if (shouldRetry && hasAttemptsRemaining) {
+        const backoffDelayMs = BASE_RETRY_DELAY_MS * (attempt + 1);
+        const delayMs =
+          explicitRetryDelayMs && explicitRetryDelayMs <= 90_000
+            ? explicitRetryDelayMs
+            : backoffDelayMs;
+        await sleep(delayMs);
+        continue;
       }
-    }
 
-    if (isQuotaOrRateLimitError(message)) {
-      try {
-        const imageDataUrl = await generateWithTextSvgFallback(apiKey, prompt);
-        return jsonResponse({ imageDataUrl });
-      } catch (fallbackError) {
-        const fallbackMessage =
-          fallbackError instanceof Error && fallbackError.message
-            ? fallbackError.message
-            : 'Fallback model failed';
-        return jsonResponse({ error: fallbackMessage }, 429);
+      if (isQuotaOrRateLimitError(message) || isHighDemandError(message)) {
+        try {
+          const imageDataUrl = await generateWithTextSvgFallback(apiKey, prompt);
+          return jsonResponse({ imageDataUrl });
+        } catch (fallbackError) {
+          const fallbackMessage =
+            fallbackError instanceof Error && fallbackError.message
+              ? fallbackError.message
+              : 'Fallback model failed';
+          return jsonResponse({ error: fallbackMessage }, 429);
+        }
       }
-    }
 
-    return jsonResponse({ error: message }, 500);
+      return jsonResponse({ error: message }, 500);
+    }
   }
+
+  if (isHighDemandError(lastImageError)) {
+    try {
+      const imageDataUrl = await generateWithTextSvgFallback(apiKey, prompt);
+      return jsonResponse({ imageDataUrl });
+    } catch (fallbackError) {
+      const fallbackMessage =
+        fallbackError instanceof Error && fallbackError.message
+          ? fallbackError.message
+          : 'Fallback model failed';
+      return jsonResponse({ error: fallbackMessage }, 429);
+    }
+  }
+
+  return jsonResponse({ error: lastImageError }, 500);
 };
