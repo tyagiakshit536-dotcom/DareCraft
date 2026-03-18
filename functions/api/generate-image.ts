@@ -112,6 +112,7 @@ function createLocalFallbackImage(prompt: string): string {
   const hueA = seed % 360;
   const hueB = (hueA + 48) % 360;
   const hueC = (hueA + 112) % 360;
+  const hueD = (hueA + 180) % 360;
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" preserveAspectRatio="xMidYMid slice">
   <defs>
@@ -128,17 +129,14 @@ function createLocalFallbackImage(prompt: string): string {
       <stop offset="0%" stop-color="rgba(255,255,255,0.20)"/>
       <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
     </radialGradient>
-    <filter id="blur" x="-30%" y="-30%" width="160%" height="160%">
-      <feGaussianBlur stdDeviation="28"/>
-    </filter>
   </defs>
   <rect width="1024" height="1024" fill="url(#bg)"/>
-  <circle cx="220" cy="220" r="260" fill="url(#glow1)"/>
-  <circle cx="820" cy="820" r="280" fill="url(#glow2)"/>
-  <g filter="url(#blur)" opacity="0.45">
-    <ellipse cx="270" cy="680" rx="280" ry="140" fill="hsl(${hueB} 90% 70%)"/>
-    <ellipse cx="760" cy="300" rx="230" ry="120" fill="hsl(${hueA} 95% 78%)"/>
-  </g>
+  <circle cx="220" cy="220" r="260" fill="url(#glow1)" opacity="0.75"/>
+  <circle cx="820" cy="820" r="280" fill="url(#glow2)" opacity="0.8"/>
+  <path d="M70 640 C260 460, 520 760, 740 620 C880 540, 980 600, 1024 680 L1024 1024 L0 1024 Z" fill="hsl(${hueD} 85% 30% / 0.52)"/>
+  <path d="M0 350 C180 240, 320 420, 530 360 C700 320, 860 150, 1024 260 L1024 410 C860 320, 700 460, 520 500 C310 540, 170 380, 0 480 Z" fill="hsl(${hueB} 88% 74% / 0.28)"/>
+  <rect x="100" y="120" width="320" height="320" rx="48" fill="hsl(${hueA} 96% 86% / 0.16)"/>
+  <rect x="580" y="560" width="360" height="300" rx="54" fill="hsl(${hueC} 95% 80% / 0.14)"/>
 </svg>`;
 
   return svgToDataUrl(svg);

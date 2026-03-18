@@ -145,20 +145,42 @@ export default function App() {
         bg: customBgUrl,
         s: generateSeed(goal + duration + theme.id),
       };
-      
-      const encoded = encodeDare(data);
-      if (!encoded) {
+
+      const toShareUrl = (payload: typeof data): string | null => {
+        const encodedPayload = encodeDare(payload);
+        if (!encodedPayload) return null;
+        return `${window.location.origin}${window.location.pathname}?d=${encodedPayload}`;
+      };
+
+      let url = toShareUrl(data);
+      if (!url) {
         alert('Failed to prepare share link. Please try again.');
         setIsGenerating(false);
         return;
       }
 
-      const url = `${window.location.origin}${window.location.pathname}?d=${encoded}`;
-      if (url.length > MAX_SHARE_URL_LENGTH) {
-        alert('Your dare is too long to share as a link. Please shorten your goal or twist.');
+      // Data URLs are huge. Keep the generated image in current session UI,
+      // but omit it from shared URL when it would exceed browser-safe limits.
+      if (url.length > MAX_SHARE_URL_LENGTH && customBgUrl) {
+        const compactData = {
+          ...data,
+          bg: undefined,
+        };
+        url = toShareUrl(compactData);
+      }
+
+      if (!url) {
+        alert('Failed to prepare share link. Please try again.');
         setIsGenerating(false);
         return;
       }
+
+      if (url.length > MAX_SHARE_URL_LENGTH) {
+        alert('Your dare text is too long to share. Please shorten your goal or twist.');
+        setIsGenerating(false);
+        return;
+      }
+
       setShareUrl(url);
       
       // Update URL without reloading
