@@ -1,52 +1,188 @@
-export async function generateAIBackground(prompt: string): Promise<string> {
-  const apiKey = "AIzaSyCmF951IAc7Z2f6TfBHB5pZRlpBvR5YIVU";
-  
-  const payload = {
-    contents: [{
-      parts: [{
-        text: `You are an expert graphic designer and SVG artist. Generate an abstract, highly aesthetic background graphic for a goal titled: "${prompt}". Output ONLY valid, clean SVG code with no markdown formatting. The SVG should be 1200x1200px, use gorgeous gradients, geometric shapes, or abstract layouts. DO NOT include any text inside the SVG. Just the raw <svg> tag. Start with <svg and end with </svg>.`
-      }]
-    }]
+type GeminiPart = {
+  text?: string;
+  inlineData?: {
+    data?: string;
+    mimeType?: string;
   };
+};
 
+type GeminiResponse = {
+  candidates?: Array<{
+    content?: {
+      parts?: GeminiPart[];
+    };
+    finishReason?: string;
+  }>;
+  error?: {
+    message?: string;
+  };
+};
+
+const IMAGE_MODEL = 'gemini-2.5-flash-image';
+const TEXT_MODEL = 'gemini-2.5-flash';
+const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+
+function getApiKey(): string {
+  const viteEnv = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
+  const key =
+    viteEnv?.VITE_GEMINI_API_KEY ||
+    (process.env.GEMINI_API_KEY as string | undefined);
+
+  if (!key) {
+    throw new Error(
+      'Gemini API key is missing. Set VITE_GEMINI_API_KEY or GEMINI_API_KEY in your environment.'
+    );
+  }
+
+  return key;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parseRetryDelayMs(message: string): number | null {
+  const match = message.match(/Please retry in\s+([0-9]+(?:\.[0-9]+)?)s\.?/i);
+  if (!match?.[1]) return null;
+  const seconds = Number.parseFloat(match[1]);
+  if (Number.isNaN(seconds) || seconds <= 0) return null;
+  return Math.ceil(seconds * 1000);
+}
+
+function isQuotaOrRateLimitError(message: string): boolean {
+  const msg = message.toLowerCase();
+  return (
+    msg.includes('quota exceeded') ||
+    msg.includes('rate limit') ||
+    msg.includes('too many requests') ||
+    msg.includes('resource_exhausted')
+  );
+}
+
+function svgToDataUrl(svg: string): string {
+  const normalized = svg
+    .replace(/\r\n/g, '\n')
+    .replace(/%/g, '%25')
+    .replace(/#/g, '%23')
+    .replace(/"/g, "'")
+    .replace(/\n/g, ' ')
+    .trim();
+  return `data:image/svg+xml;utf8,${normalized}`;
+}
+
+function extractImageDataUrl(data: GeminiResponse): string | null {
+  const parts = data.candidates?.[0]?.content?.parts || [];
+  const imagePart = parts.find((part) => part.inlineData?.data);
+  if (!imagePart?.inlineData?.data) return null;
+  const mimeType = imagePart.inlineData.mimeType || 'image/png';
+  return `data:${mimeType};base64,${imagePart.inlineData.data}`;
+}
+
+function extractSvgText(data: GeminiResponse): string | null {
+  const parts = data.candidates?.[0]?.content?.parts || [];
+  const text = parts.find((part) => part.text)?.text || '';
+  const svgMatch = text.match(/<svg[\s\S]*<\/svg>/i);
+  return svgMatch?.[0] || null;
+}
+
+async function callGemini(
+  apiKey: string,
+  model: string,
+  payload: Record<string, unknown>
+): Promise<GeminiResponse> {
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    `${API_BASE}/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
     {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }
   );
 
-  const data = await res.json();
+  const data = (await res.json()) as GeminiResponse;
   if (!res.ok) {
-    throw new Error(data.error?.message || "Failed to generate image with Gemini");
+    throw new Error(data.error?.message || `Gemini request failed for model ${model}`);
   }
 
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-  
-  // Extract strictly the SVG part
-  const match = text.match(/<svg[\s\S]*<\/svg>/i);
-  let cleanSvg = match ? match[0] : "";
-  
-  // Fallback if regex fails but we have some text
-  if (!cleanSvg && text.includes("<svg")) {
-      cleanSvg = text.substring(text.indexOf("<svg"), text.lastIndexOf("</svg>") + 6);
-  }
+  return data;
+}
 
-  // Ensure xmlns is present for data URIs
-  if (cleanSvg && !cleanSvg.includes("xmlns=")) {
-      cleanSvg = cleanSvg.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"');
-  }
-  
-  // Ensure width and height are present so canvas drawing doesn't fail
-  if (cleanSvg && !cleanSvg.includes("width=")) {
-      cleanSvg = cleanSvg.replace("<svg", '<svg width="1200" height="1200"');
-  }
+async function generateWithImageModel(apiKey: string, prompt: string): Promise<string> {
+  const payload = {
+    contents: [
+      {
+        parts: [
+          {
+            text:
+              `Create a square social-card background image for this challenge: "${prompt}". ` +
+              'Style: abstract, premium, modern, cinematic lighting, vibrant gradients, no text, no logos. ' +
+              'Composition should leave clear center space for headline text overlay. Output image only.',
+          },
+        ],
+      },
+    ],
+    generationConfig: {
+      responseModalities: ['IMAGE'],
+    },
+  };
 
-  // Safe base64 encoding for browsers that handles unicode correctly
-  const base64 = btoa(
-    new TextEncoder().encode(cleanSvg).reduce((data, byte) => data + String.fromCharCode(byte), '')
-  );
-  return `data:image/svg+xml;base64,${base64}`;
+  const firstTry = await callGemini(apiKey, IMAGE_MODEL, payload);
+  const imageUrl = extractImageDataUrl(firstTry);
+  if (!imageUrl) {
+    throw new Error('Gemini did not return image data from the image model.');
+  }
+  return imageUrl;
+}
+
+async function generateWithTextSvgFallback(apiKey: string, prompt: string): Promise<string> {
+  const payload = {
+    contents: [
+      {
+        parts: [
+          {
+            text:
+              `Generate a premium abstract background SVG for this challenge: "${prompt}". ` +
+              'Return only raw SVG markup. No markdown, no explanations, no text elements. ' +
+              'Use 1024x1024 canvas with layered gradients and clean geometric forms.',
+          },
+        ],
+      },
+    ],
+  };
+
+  const data = await callGemini(apiKey, TEXT_MODEL, payload);
+  const svg = extractSvgText(data);
+  if (!svg) {
+    throw new Error('Fallback model returned no SVG.');
+  }
+  return svgToDataUrl(svg);
+}
+
+export async function generateAIBackground(prompt: string): Promise<string> {
+  const apiKey = getApiKey();
+
+  try {
+    return await generateWithImageModel(apiKey, prompt);
+  } catch (error) {
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : 'Failed to generate image with Gemini';
+
+    const retryDelayMs = parseRetryDelayMs(message);
+    if (retryDelayMs && retryDelayMs <= 90_000) {
+      await sleep(retryDelayMs);
+      try {
+        return await generateWithImageModel(apiKey, prompt);
+      } catch {
+        // Fall through to fallback flow below.
+      }
+    }
+
+    if (isQuotaOrRateLimitError(message)) {
+      return await generateWithTextSvgFallback(apiKey, prompt);
+    }
+
+    throw new Error(message);
+  }
 }

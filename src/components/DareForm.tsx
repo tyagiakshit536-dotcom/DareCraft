@@ -50,8 +50,16 @@ export function DareForm({
       const url = await generateAIBackground(prompt);
       setCustomBgUrl(url);
     } catch (error) {
-      console.error(error);
-      alert("Failed to generate AI background image.");
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Failed to generate AI background image.';
+      console.error('AI image generation failed:', message);
+      if (message.toLowerCase().includes('leaked')) {
+        alert('Gemini API key is blocked as leaked. Create a new API key in Google AI Studio and update your .env, then restart the dev server.');
+      } else {
+        alert(`Failed to generate AI background image: ${message}`);
+      }
     } finally {
       setIsGeneratingImg(false);
     }

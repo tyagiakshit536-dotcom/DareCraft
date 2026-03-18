@@ -15,6 +15,13 @@ View your app in AI Studio: https://ai.studio/apps/125eea7e-1d83-45bd-92fe-d9e9f
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+2. Set one of these in [.env.local](.env.local) to your Gemini API key:
+   - `VITE_GEMINI_API_KEY` (preferred for Vite)
+   - `GEMINI_API_KEY` (supported fallback)
 3. Run the app:
    `npm run dev`
+
+## AI Image Generation
+
+- Model used: `gemini-2.5-flash-image` (Gemini 2.5 Flash image generation)
+- Endpoint: Gemini `generateContent` with `responseModalities: ['IMAGE']`

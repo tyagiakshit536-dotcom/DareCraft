@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Theme } from '../lib/themes';
 import { DareCard } from './DareCard';
+import { cn } from '../lib/utils';
 import { Play, Plus } from 'lucide-react';
 
 interface SharedViewProps {
@@ -9,6 +10,7 @@ interface SharedViewProps {
   duration: number;
   theme: Theme;
   twist: string;
+  customBgUrl?: string;
   onJoin: () => void;
   onCreateOwn: () => void;
 }
@@ -18,31 +20,24 @@ export function SharedView({
   duration,
   theme,
   twist,
+  customBgUrl,
   onJoin,
   onCreateOwn,
 }: SharedViewProps) {
   const [progress, setProgress] = useState(0);
-  const [filledBoxes, setFilledBoxes] = useState(0);
-  const boxCount = Math.min(duration, 30);
+  const [isAccepted, setIsAccepted] = useState(false);
+
+  const handleAccept = () => {
+    if (isAccepted) return;
+    onJoin();
+    setIsAccepted(true);
+  };
 
   useEffect(() => {
     // Animate progress to 0 to show it's a new challenge
     const timer = setTimeout(() => setProgress(0), 500);
     return () => clearTimeout(timer);
   }, []);
-
-  useEffect(() => {
-    let current = 0;
-    const interval = window.setInterval(() => {
-      current += 1;
-      setFilledBoxes(current);
-      if (current >= boxCount) {
-        window.clearInterval(interval);
-      }
-    }, 90);
-
-    return () => window.clearInterval(interval);
-  }, [boxCount]);
 
   return (
     <div
@@ -73,29 +68,43 @@ export function SharedView({
             twist={twist}
             isShared={true}
             progress={progress}
+            customBgUrl={customBgUrl}
           />
         </div>
       </div>
 
-      <div className="w-full max-w-[640px] px-4 animate-lift-in" style={{ animationDelay: '220ms' }}>
-        <p className="text-center text-zinc-400 text-sm uppercase tracking-[0.2em] mb-3">Challenge Progress Preview</p>
-        <div className="grid grid-cols-10 gap-2">
-          {Array.from({ length: boxCount }).map((_, idx) => {
-            const isFilled = idx < filledBoxes;
-            return (
-              <div
-                key={idx}
-                className={[
-                  'h-6 rounded-md border flex items-center justify-center text-[10px] font-bold transition-all duration-300',
-                  isFilled
-                    ? 'bg-gradient-to-r from-emerald-400 to-teal-500 border-emerald-300 text-white shadow-[0_0_12px_rgba(16,185,129,0.45)] animate-check-pop'
-                    : 'bg-zinc-900/80 border-zinc-700 text-zinc-500',
-                ].join(' ')}
-              >
-                {isFilled ? '✓' : idx + 1}
-              </div>
-            );
-          })}
+      <div className="relative -mt-6 z-20 animate-in fade-in zoom-in duration-500">
+        <div className="relative w-32 h-32 md:w-40 md:h-40 flex items-center justify-center rounded-full bg-zinc-950/80 border border-white/15 backdrop-blur-md">
+          <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+            <circle
+              cx="50"
+              cy="50"
+              r="45"
+              fill="transparent"
+              stroke="currentColor"
+              strokeWidth="8"
+              className="opacity-20"
+            />
+            <circle
+              cx="50"
+              cy="50"
+              r="45"
+              fill="transparent"
+              stroke="currentColor"
+              strokeWidth="8"
+              strokeDasharray={`${2 * Math.PI * 45}`}
+              strokeDashoffset={2 * Math.PI * 45 * (1 - progress / duration)}
+              className="drop-shadow-[0_0_10px_rgba(255,255,255,0.5)] transition-all duration-1000 ease-out"
+            />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className={cn('text-3xl md:text-4xl', theme.fontTitle)}>
+              {progress}
+            </span>
+            <span className={cn('text-sm uppercase tracking-widest opacity-70', theme.fontBody)}>
+              / {duration}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -103,11 +112,12 @@ export function SharedView({
         className="flex flex-col sm:flex-row items-center justify-center gap-4 w-full max-w-xl animate-in slide-in-from-bottom-4 duration-500 delay-600 fill-mode-both px-4"
       >
         <button
-          onClick={onJoin}
-          className="w-full sm:flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black text-xl py-5 px-8 rounded-2xl hover:opacity-90 transition-all hover:scale-105 active:scale-95 shadow-[0_0_30px_rgba(16,185,129,0.4)] relative overflow-hidden group btn-shine animate-pulse"
+          onClick={handleAccept}
+          disabled={isAccepted}
+          className="w-full sm:flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black text-xl py-5 px-8 rounded-2xl hover:opacity-90 transition-all hover:scale-105 active:scale-95 shadow-[0_0_30px_rgba(16,185,129,0.4)] relative overflow-hidden group btn-shine animate-pulse disabled:opacity-85 disabled:cursor-default disabled:hover:scale-100"
         >
           <Play className="w-6 h-6 fill-current relative z-10" />
-          <span className="relative z-10">Accept the Dare</span>
+          <span className="relative z-10">{isAccepted ? 'Dare Accepted' : 'Accept the Dare'}</span>
         </button>
         
         <button

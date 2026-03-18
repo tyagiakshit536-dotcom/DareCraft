@@ -38,6 +38,7 @@ export default function App() {
         const foundTheme = THEMES.find((t) => t.id === decoded.t);
         if (foundTheme) setTheme(foundTheme);
         setTwist(decoded.tw || '');
+        setCustomBgUrl(decoded.bg || undefined);
         setView('shared');
         setShowMagicFlash(true);
         window.setTimeout(() => setShowMagicFlash(false), 720);
@@ -133,6 +134,7 @@ export default function App() {
         d: duration,
         t: theme.id,
         tw: twist,
+        bg: customBgUrl,
         s: generateSeed(goal + duration + theme.id),
       };
       
@@ -243,7 +245,7 @@ export default function App() {
           <div className="w-8 h-8 rounded-lg border-2 border-white flex items-center justify-center transform group-hover:rotate-12 transition-transform">
             <Zap className="w-5 h-5 text-white fill-white" />
           </div>
-          <span className="text-xl font-bold tracking-tight">DareCraft.me</span>
+          <span className="text-xl font-bold tracking-tight">DareCraft</span>
         </div>
         
         <div className="hidden md:flex items-center gap-3 bg-zinc-900/40 border border-white/10 px-4 py-2 rounded-full backdrop-blur-md shadow-lg shadow-black/20 hover:bg-zinc-800/60 transition-all cursor-default">
@@ -339,6 +341,7 @@ export default function App() {
             duration={duration}
             theme={theme}
             twist={twist}
+            customBgUrl={customBgUrl}
             onJoin={handleJoin}
             onCreateOwn={handleReset}
           />
