@@ -25,9 +25,9 @@ type Env = {
 const IMAGE_MODEL = 'gemini-2.5-flash-image';
 const TEXT_MODEL = 'gemini-2.5-flash';
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-const MAX_IMAGE_RETRIES = 3;
-const BASE_RETRY_DELAY_MS = 1500;
-const GEMINI_REQUEST_TIMEOUT_MS = 45_000;
+const MAX_IMAGE_RETRIES = 1;
+const BASE_RETRY_DELAY_MS = 1000;
+const GEMINI_REQUEST_TIMEOUT_MS = 15_000;
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -92,6 +92,56 @@ function isHighDemandError(message: string): boolean {
     msg.includes('overloaded') ||
     msg.includes('capacity')
   );
+}
+
+function isTimeoutError(message: string): boolean {
+  return message.toLowerCase().includes('timed out');
+}
+
+function hashString(input: string): number {
+  let hash = 0;
+  for (let i = 0; i < input.length; i += 1) {
+    hash = (hash << 5) - hash + input.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function createLocalFallbackImage(prompt: string): string {
+  const seed = hashString(prompt || 'darecraft');
+  const hueA = seed % 360;
+  const hueB = (hueA + 48) % 360;
+  const hueC = (hueA + 112) % 360;
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="hsl(${hueA} 85% 52%)"/>
+      <stop offset="50%" stop-color="hsl(${hueB} 80% 40%)"/>
+      <stop offset="100%" stop-color="hsl(${hueC} 78% 28%)"/>
+    </linearGradient>
+    <radialGradient id="glow1" cx="20%" cy="20%" r="60%">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.30)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="80%" cy="80%" r="55%">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.20)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+    </radialGradient>
+    <filter id="blur" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="28"/>
+    </filter>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <circle cx="220" cy="220" r="260" fill="url(#glow1)"/>
+  <circle cx="820" cy="820" r="280" fill="url(#glow2)"/>
+  <g filter="url(#blur)" opacity="0.45">
+    <ellipse cx="270" cy="680" rx="280" ry="140" fill="hsl(${hueB} 90% 70%)"/>
+    <ellipse cx="760" cy="300" rx="230" ry="120" fill="hsl(${hueA} 95% 78%)"/>
+  </g>
+</svg>`;
+
+  return svgToDataUrl(svg);
 }
 
 function sleep(ms: number): Promise<void> {
@@ -241,7 +291,7 @@ export const onRequestPost = async (context: FunctionContext): Promise<Response>
         continue;
       }
 
-      if (isQuotaOrRateLimitError(message) || isHighDemandError(message)) {
+      if (isQuotaOrRateLimitError(message) || isHighDemandError(message) || isTimeoutError(message)) {
         try {
           const imageDataUrl = await generateWithTextSvgFallback(apiKey, prompt);
           return jsonResponse({ imageDataUrl });
@@ -250,15 +300,17 @@ export const onRequestPost = async (context: FunctionContext): Promise<Response>
             fallbackError instanceof Error && fallbackError.message
               ? fallbackError.message
               : 'Fallback model failed';
-          return jsonResponse({ error: fallbackMessage }, 429);
+          const imageDataUrl = createLocalFallbackImage(prompt);
+          return jsonResponse({ imageDataUrl, fallbackReason: fallbackMessage }, 200);
         }
       }
 
-      return jsonResponse({ error: message }, 500);
+      const imageDataUrl = createLocalFallbackImage(prompt);
+      return jsonResponse({ imageDataUrl, fallbackReason: message }, 200);
     }
   }
 
-  if (isHighDemandError(lastImageError)) {
+  if (isHighDemandError(lastImageError) || isTimeoutError(lastImageError)) {
     try {
       const imageDataUrl = await generateWithTextSvgFallback(apiKey, prompt);
       return jsonResponse({ imageDataUrl });
@@ -267,9 +319,11 @@ export const onRequestPost = async (context: FunctionContext): Promise<Response>
         fallbackError instanceof Error && fallbackError.message
           ? fallbackError.message
           : 'Fallback model failed';
-      return jsonResponse({ error: fallbackMessage }, 429);
+      const imageDataUrl = createLocalFallbackImage(prompt);
+      return jsonResponse({ imageDataUrl, fallbackReason: fallbackMessage }, 200);
     }
   }
 
-  return jsonResponse({ error: lastImageError }, 500);
+  const imageDataUrl = createLocalFallbackImage(prompt);
+  return jsonResponse({ imageDataUrl, fallbackReason: lastImageError }, 200);
 };
