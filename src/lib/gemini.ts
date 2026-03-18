@@ -21,16 +21,36 @@ type GeminiResponse = {
 const IMAGE_MODEL = 'gemini-2.5-flash-image';
 const TEXT_MODEL = 'gemini-2.5-flash';
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+const API_KEY_STORAGE_KEY = 'darecraft_gemini_api_key';
+
+function readStoredApiKey(): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  const value = window.localStorage.getItem(API_KEY_STORAGE_KEY)?.trim();
+  return value || undefined;
+}
+
+function maybePromptForApiKey(): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  const entered = window
+    .prompt('Enter your Gemini API key to enable AI image generation:')
+    ?.trim();
+  if (!entered) return undefined;
+  window.localStorage.setItem(API_KEY_STORAGE_KEY, entered);
+  return entered;
+}
 
 function getApiKey(): string {
   const viteEnv = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
   const key =
     viteEnv?.VITE_GEMINI_API_KEY ||
-    (process.env.GEMINI_API_KEY as string | undefined);
+    viteEnv?.GEMINI_API_KEY ||
+    (process.env.GEMINI_API_KEY as string | undefined) ||
+    readStoredApiKey() ||
+    maybePromptForApiKey();
 
   if (!key) {
     throw new Error(
-      'Gemini API key is missing. Set VITE_GEMINI_API_KEY or GEMINI_API_KEY in your environment.'
+      'Gemini API key is missing. Set VITE_GEMINI_API_KEY at build time or provide a key when prompted.'
     );
   }
 
