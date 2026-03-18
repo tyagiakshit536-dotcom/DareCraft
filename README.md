@@ -25,4 +25,14 @@ View your app in AI Studio: https://ai.studio/apps/125eea7e-1d83-45bd-92fe-d9e9f
 
 - Model used: `gemini-2.5-flash-image` (Gemini 2.5 Flash image generation)
 - Endpoint: Gemini `generateContent` with `responseModalities: ['IMAGE']`
-- Deployed fallback: if no build-time env key exists, the app will prompt for a Gemini API key in the browser and store it in `localStorage` for future sessions.
+- Frontend now calls `/api/generate-image`.
+- API key is read server-side from `GEMINI_API_KEY`, so end-users are never prompted for a key.
+
+## Cloudflare Pages Setup (Required)
+
+1. Open your Cloudflare Pages project settings.
+2. Go to **Environment Variables**.
+3. Add secret `GEMINI_API_KEY` with your Gemini key value.
+4. Redeploy the site.
+
+If `GEMINI_API_KEY` is missing in production, `/api/generate-image` will return an error and image generation will fail.
